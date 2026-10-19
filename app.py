@@ -5,8 +5,8 @@ from sentence_transformers import SentenceTransformer
 from google import genai
 from google.genai import types
 
-# Nombre del modelo estable de Google AI Studio
-MODELO_IA = "gemini-1.5-flash"
+# Nombre oficial y vigente del modelo en la API
+MODELO_IA = "gemini-3.8-flash"
 
 INSTRUCCIONES = """Eres un asistente de orientación sobre procedimientos policiales en Ecuador.
 Reglas obligatorias:
@@ -66,7 +66,7 @@ if pregunta:
             cliente = genai.Client(api_key=clave)
             exito = False
             
-            # Reintentos automáticos para manejar picos de saturación (Error 503)
+            # Reintentos automáticos ante picos temporales de la API
             for intento in range(3):
                 try:
                     respuesta = cliente.models.generate_content(
@@ -78,10 +78,10 @@ if pregunta:
                     exito = True
                     break
                 except Exception as e:
-                    if "503" in str(e) and intento < 2:
-                        time.sleep(3)  # Espera 3 segundos antes de reintentar
+                    if intento < 2:
+                        time.sleep(2)
                     else:
-                        st.error(f"⚠️ Servidores de Google con alta demanda temporal o error de conexión. Por favor, reintenta en un momento.")
+                        st.error(f"⚠️ Error de conexión con la IA o saturación momentánea. Detalle: {str(e)}")
                         break
             
             if exito:
