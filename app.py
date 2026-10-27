@@ -22,11 +22,49 @@ Reglas obligatorias:
    - **Cuándo consultar a fiscalía o asesoría jurídica**
 6. Eres una herramienta de orientación: no reemplazas el criterio del servidor policial ni la asesoría jurídica oficial."""
 
+# --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Asistente Normativo Policial", page_icon="🛡️")
-st.title("🛡️ Asistente Normativo Policial (Ecuador)")
-st.caption("Herramienta de orientación basada en normativa pública. No sustituye asesoría jurídica.")
 
-# Panel lateral para la clave
+# --- ESTILOS VISUALES INSTITUCIONALES (CSS) ---
+st.markdown("""
+    <style>
+    /* Color de fondo principal de la aplicación */
+    .stApp {
+        background-color: #0b131d;
+        color: #e0e0e0;
+    }
+    
+    /* Personalización del panel lateral (Sidebar) */
+    [data-testid="stSidebar"] {
+        background-color: #0d1b2a;
+        border-right: 1px solid #c59b27;
+    }
+    
+    /* Estilo para los títulos principales */
+    h1, h2, h3 {
+        color: #f0f0f0 !important;
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    
+    /* Estilo del contenedor de chat del asistente */
+    .stChatMessage {
+        border-radius: 8px;
+        padding: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Título y cabecera
+st.title("🛡️ Asistente Normativo Policial (Ecuador)")
+st.caption("Herramienta de orientación basada en 27 cuerpos normativos institucionales. No sustituye asesoría jurídica.")
+
+# --- PANEL LATERAL ---
+try:
+    st.sidebar.image("escudo.png", use_container_width=True)
+except Exception:
+    st.sidebar.markdown("### 🛡️ POLICÍA NACIONAL")
+
+st.sidebar.markdown("---")
 clave = st.sidebar.text_input("Clave de Google AI Studio", type="password")
 st.sidebar.info("Pega aquí tu clave API generada en Google AI Studio para activar la inteligencia artificial.")
 
@@ -39,7 +77,7 @@ def cargar_recursos():
 
 modelo, coleccion = cargar_recursos()
 
-pregunta = st.chat_input("Describe el caso o escribe tu pregunta (ej: allanamientos, boletas, etc.)...")
+pregunta = st.chat_input("Describe el caso o escribe tu pregunta (ej: uso de la fuerza, aprehensión, tránsito, etc.)...")
 
 if pregunta:
     if not clave:
@@ -49,9 +87,9 @@ if pregunta:
     with st.chat_message("user"):
         st.write(pregunta)
         
-    # Buscar en la base vectorial los 6 fragmentos más parecidos
+    # Buscar en la base vectorial los 8 fragmentos más parecidos (optimizado para los 27 cuerpos normativos)
     vector = modelo.encode(["query: " + pregunta], normalize_embeddings=True).tolist()
-    resultado = coleccion.query(query_embeddings=vector, n_results=6)
+    resultado = coleccion.query(query_embeddings=vector, n_results=8)
     fragmentos = resultado["documents"][0]
     metadatos = resultado["metadatas"][0]
     
@@ -62,7 +100,7 @@ if pregunta:
     mensaje = f"CONTEXTO:\n{contexto}\n\nPREGUNTA DEL USUARIO:\n{pregunta}"
     
     with st.chat_message("assistant"):
-        with st.spinner("Analizando la normativa ecuatoriana..."):
+        with st.spinner("Analizando los 27 cuerpos normativos..."):
             cliente = genai.Client(api_key=clave)
             exito = False
             
@@ -89,3 +127,4 @@ if pregunta:
                     for d, m in zip(fragmentos, metadatos):
                         st.markdown(f"**Norma: {m['norma']} | Artículo: {m['articulo']}**")
                         st.text(d[:700])
+
