@@ -14,7 +14,7 @@ Reglas obligatorias:
 2. Si el contexto no alcanza para responder con seguridad, di claramente: "No encuentro sustento normativo suficiente en la normativa cargada" y sugiere consultar a fiscalía o asesoría jurídica.
 3. Cita siempre la norma y el artículo (por ejemplo: COIP, Art. X).
 4. Si faltan datos clave (edad, tipo de orden, quién la emitió, etc.), indica qué dato falta y cómo cambiaría la respuesta.
-5. Usa estrictamente esta estructura en tu respuesta:
+5. Usa strictly esta estructura en tu respuesta:
    - **Hechos relevantes**
    - **Base legal**
    - **Procedimiento sugerido**
@@ -87,13 +87,14 @@ if pregunta:
     fragmentos = resultado.get("documents", [[]])[0]
     metadatas = resultado.get("metadatas", [[]])[0]
     
-    # Construcción segura del contexto evitando errores si algún metadato es None o falta
+    # Construcción segura del contexto
     contexto_list = []
     for d, m in zip(fragmentos, metadatas):
         meta = m if isinstance(m, dict) else {}
         norma = meta.get("norma", "Norma Institucional")
         articulo = meta.get("articulo", "Artículo General")
-        contexto_list.append(f"[{norma} - {articulo}]\n{d}")
+        texto_doc = str(d) if d is not None else ""
+        contexto_list.append(f"[{norma} - {articulo}]\n{texto_doc}")
         
     contexto = "\n\n".join(contexto_list)
     mensaje = f"CONTEXTO:\n{contexto}\n\nPREGUNTA DEL USUARIO:\n{pregunta}"
@@ -126,5 +127,6 @@ if pregunta:
                         meta = m if isinstance(m, dict) else {}
                         norma = meta.get("norma", "Norma Institucional")
                         articulo = meta.get("articulo", "Artículo General")
+                        texto_doc = str(d) if d is not None else ""
                         st.markdown(f"**Norma: {norma} | Artículo: {articulo}**")
-                        st.text(d[:700])
+                        st.text(texto_doc[:700])
