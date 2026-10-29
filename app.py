@@ -28,25 +28,18 @@ st.set_page_config(page_title="Asistente Normativo Policial", page_icon="🛡️
 # --- ESTILOS VISUALES INSTITUCIONALES (CSS) ---
 st.markdown("""
     <style>
-    /* Color de fondo principal de la aplicación */
     .stApp {
         background-color: #0b131d;
         color: #e0e0e0;
     }
-    
-    /* Personalización del panel lateral (Sidebar) */
     [data-testid="stSidebar"] {
         background-color: #0d1b2a;
         border-right: 1px solid #c59b27;
     }
-    
-    /* Estilo para los títulos principales */
     h1, h2, h3 {
         color: #f0f0f0 !important;
         font-family: 'Helvetica Neue', sans-serif;
     }
-    
-    /* Estilo del contenedor de chat del asistente */
     .stChatMessage {
         border-radius: 8px;
         padding: 10px;
@@ -87,16 +80,22 @@ if pregunta:
     with st.chat_message("user"):
         st.write(pregunta)
         
-    # Buscar en la base vectorial los 8 fragmentos más parecidos (optimizado para los 27 cuerpos normativos)
+    # Buscar en la base vectorial los 8 fragmentos más parecidos
     vector = modelo.encode(["query: " + pregunta], normalize_embeddings=True).tolist()
     resultado = coleccion.query(query_embeddings=vector, n_results=8)
-    fragmentos = resultado["documents"][0]
-    metadatos = resultado["metadatas"][0]
     
-    contexto = "\n\n".join(
-        f"[{m['norma']} - {m['articulo']}]\n{d}" for d, m in zip(fragmentos, metadatos)
-    )
+    fragmentos = resultado.get("documents", [[]])[0]
+    metadatas = resultado.get("metadatas", [[]])[0]
     
+    # Construcción segura del contexto evitando errores si algún metadato es None o falta
+    contexto_list = []
+    for d, m in zip(fragmentos, metadatas):
+        meta = m if isinstance(m, dict) else {}
+        norma = meta.get("norma", "Norma Institucional")
+        articulo = meta.get("articulo", "Artículo General")
+        contexto_list.append(f"[{norma} - {articulo}]\n{d}")
+        
+    contexto = "\n\n".join(contexto_list)
     mensaje = f"CONTEXTO:\n{contexto}\n\nPREGUNTA DEL USUARIO:\n{pregunta}"
     
     with st.chat_message("assistant"):
@@ -104,7 +103,6 @@ if pregunta:
             cliente = genai.Client(api_key=clave)
             exito = False
             
-            # Reintentos automáticos ante picos temporales de la API
             for intento in range(3):
                 try:
                     respuesta = cliente.models.generate_content(
@@ -124,7 +122,9 @@ if pregunta:
             
             if exito:
                 with st.expander("Ver artículos consultados en la base de datos"):
-                    for d, m in zip(fragmentos, metadatos):
-                        st.markdown(f"**Norma: {m['norma']} | Artículo: {m['articulo']}**")
+                    for d, m in zip(fragmentos, metadatas):
+                        meta = m if isinstance(m, dict) else {}
+                        norma = meta.get("norma", "Norma Institucional")
+                        articulo = meta.get("articulo", "Artículo General")
+                        st.markdown(f"**Norma: {norma} | Artículo: {articulo}**")
                         st.text(d[:700])
-
