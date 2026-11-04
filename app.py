@@ -5,8 +5,8 @@ from sentence_transformers import SentenceTransformer
 from google import genai
 from google.genai import types
 
-# Nombre oficial y vigente del modelo en la API
-MODELO_IA = "gemini-3.8-flash"
+# Lista de modelos prioritarios con respaldo automático ante saturación (503)
+MODELOS_IA = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
 
 INSTRUCCIONES = """Eres un asistente de orientación sobre procedimientos policiales en Ecuador, especializado en asesoría táctico-operativa y legal.
 
@@ -57,7 +57,7 @@ st.markdown("""
 
 # Título y cabecera
 st.title("🛡️ Asistente Normativo Policial (Ecuador)")
-st.caption("Herramienta de orientación basada en 27 cuerpos normativos institucionales. Gestión de casos en tiempo real.")
+st.caption("Herramienta de orientación basada en cuerpos normativos institucionales. Gestión de casos en tiempo real.")
 
 # --- PANEL LATERAL ---
 try:
@@ -74,10 +74,9 @@ if st.sidebar.button("🔴 Cerrar caso e iniciar nueva consulta", use_container_
     st.session_state["messages"] = []
     st.rerun()
 
-# --- CARGA MOPTINIZADA DE RECURSOS ---
+# --- CARGA OPTIMIZADA DE RECURSOS ---
 @st.cache_resource
 def cargar_recursos():
-    # Modelo ligero optimizado para embeddings rápidos
     modelo = SentenceTransformer("intfloat/multilingual-e5-small")
     cliente = chromadb.PersistentClient(path="base_vectorial")
     coleccion = cliente.get_collection("normativa")
@@ -106,14 +105,14 @@ if pregunta:
     with st.chat_message("user"):
         st.write(pregunta)
 
-    # 1. Búsqueda vectorial rápida de contexto (retornamos 6 fragmentos para acelerar la respuesta)
+    # 1. Búsqueda vectorial rápida de contexto (6 fragmentos)
     vector = modelo.encode(["query: " + pregunta], normalize_embeddings=True).tolist()
     resultado = coleccion.query(query_embeddings=vector, n_results=6)
     
     fragmentos = resultado.get("documents", [[]])[0]
     metadatas = resultado.get("metadatas", [[]])[0]
     
-    # Construcción limpia del contexto normativo
+    # Construcción limpia y segura del contexto normativo
     contexto_list = []
     for d, m in zip(fragmentos, metadatas):
         meta = m if isinstance(m, dict) else {}
@@ -124,7 +123,7 @@ if pregunta:
         
     contexto = "\n\n".join(contexto_list)
 
-    # 2. Reconstrucción del historial para enviar a Gemini (permite repreguntar sobre el mismo caso)
+    # 2. Reconstrucción del historial para la IA
     historial_texto = ""
     for m in st.session_state["messages"]:
         rol = "POLICÍA (Usuario)" if m["role"] == "user" else "ASISTENTE"
@@ -132,32 +131,39 @@ if pregunta:
 
     prompt_completo = f"CONTEXTO LEGAL EXTRAÍDO DE LA BASE VECTORIAL:\n{contexto}\n\nHISTORIAL Y CASO ACTUAL:\n{historial_texto}"
 
-    # 3. Generación de respuesta con Gemini
+    # 3. Generación de respuesta con Gemini (con reintentos y tolerancia a fallos 503)
     with st.chat_message("assistant"):
         with st.spinner("Consultando la normativa y formulando recomendaciones de procedimiento..."):
             cliente = genai.Client(api_key=clave)
             exito = False
+            texto_respuesta = ""
             
-            for intento in range(3):
-                try:
-                    respuesta = cliente.models.generate_content(
-                        model=MODELO_IA,
-                        contents=prompt_completo,
-                        config=types.GenerateContentConfig(system_instruction=INSTRUCCIONES),
-                    )
-                    texto_respuesta = respuesta.text
-                    st.write(texto_respuesta)
-                    
-                    # Guardar respuesta en el historial del caso
-                    st.session_state["messages"].append({"role": "assistant", "content": texto_respuesta})
-                    exito = True
+            for modelo_intento in MODELOS_IA:
+                if exito:
                     break
-                except Exception as e:
-                    if intento < 2:
-                        time.sleep(1)
-                    else:
-                        st.error(f"⚠️ Error al conectar con la IA: {str(e)}")
+                for intento in range(2):
+                    try:
+                        respuesta = cliente.models.generate_content(
+                            model=modelo_intento,
+                            contents=prompt_completo,
+                            config=types.GenerateContentConfig(system_instruction=INSTRUCCIONES),
+                        )
+                        texto_respuesta = respuesta.text
+                        st.write(texto_respuesta)
+                        
+                        # Guardar en el historial del caso
+                        st.session_state["messages"].append({"role": "assistant", "content": texto_respuesta})
+                        exito = True
                         break
+                    except Exception as e:
+                        error_str = str(e)
+                        if "503" in error_str or "UNAVAILABLE" in error_str:
+                            time.sleep(2)
+                        else:
+                            time.sleep(1)
+            
+            if not exito:
+                st.error("⚠️ Los servidores de IA están experimentando alta demanda momentánea (503). Por favor, reintenta enviando la pregunta en unos segundos.")
             
             if exito:
                 with st.expander("Ver artículos y fragmentos legales consultados"):
